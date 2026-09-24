@@ -101,7 +101,14 @@
   <aside>
     <h1>Berlin-Karte</h1>
     <p class="sub">Orte eintragen, bewerten, mit Fotos versehen und Fahrzeiten berechnen.</p>
+    <p class="banner" id="viewBanner" style="display:none;background:#eef3fb;border:1px solid #cddcef;border-radius:8px;padding:8px 10px;font-size:13px">
+      Nur Ansicht. <button type="button" id="unlockBtn" style="padding:2px 8px;font-size:12px">🔒 Bearbeiten freischalten</button>
+    </p>
+    <p class="hint" id="lockRow" style="display:none">
+      Bearbeitung aktiv auf diesem Gerät. <button type="button" id="lockBtn" style="padding:2px 8px;font-size:12px">Sperren</button>
+    </p>
 
+    <div id="addSection">
     <div class="row">
       <input type="text" id="q" placeholder="Adresse oder Ort suchen" aria-label="Suche">
       <button id="searchBtn">Suchen</button>
@@ -138,6 +145,8 @@
         <button class="danger" id="fDelete" style="display:none">Löschen</button>
       </div>
     </div>
+    </div>
+
 
     <h2>Route und Fahrzeit</h2>
     <p class="hint">Orte in der Liste in der gewünschten Reihenfolge anhaken.</p>
@@ -195,6 +204,33 @@ const CATS = {
 };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// ---- Zugriffsschutz ----
+const EDIT_HASH = '1a7ab7299644366145419526afe0b7f3b48cfbd7999a225e6a9f5a58eaabdd8a';
+const EDIT_KEY = 'bk-edit-unlocked';
+let editable = localStorage.getItem(EDIT_KEY) === '1';
+async function sha256(text){
+  if(!(window.crypto && crypto.subtle)) return null;
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+function applyEditableUI(){
+  $('viewBanner').style.display = editable ? 'none' : 'block';
+  $('lockRow').style.display = editable ? 'block' : 'none';
+  $('addSection').style.display = editable ? '' : 'none';
+  $('importBtn').style.display = editable ? '' : 'none';
+  render();
+}
+$('unlockBtn').onclick = async () => {
+  const pw = prompt('Passwort für die Bearbeitung:');
+  if(pw == null) return;
+  const hash = await sha256(pw);
+  if(hash === EDIT_HASH){ editable = true; localStorage.setItem(EDIT_KEY, '1'); applyEditableUI(); }
+  else alert('Falsches Passwort.');
+};
+$('lockBtn').onclick = () => {
+  editable = false; localStorage.removeItem(EDIT_KEY); applyEditableUI();
+};
 const linkify = s => esc(s).replace(/((https?:\/\/|www\.)[^\s<]+)/gi, m => {
   const href = m.toLowerCase().startsWith('http') ? m : 'https://' + m;
   return `<a href="${href}" target="_blank" rel="noopener noreferrer">${m}</a>`;
@@ -235,7 +271,7 @@ const map = L.map('map').setView([52.52, 13.405], 10);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19, attribution: '&copy; OpenStreetMap-Mitwirkende'
 }).addTo(map);
-map.on('click', e => startForm({lat:e.latlng.lat, lng:e.latlng.lng}));
+map.on('click', e => { if(!editable) return; startForm({lat:e.latlng.lat, lng:e.latlng.lng}); });
 
 // ---- Kategorie-Chips ----
 const chipHtml = (key, on) => `<button type="button" class="chip ${on?'on':''}" style="--cc:${CATS[key].color}" data-c="${key}">${CATS[key].icon} ${CATS[key].label}</button>`;
@@ -309,6 +345,7 @@ function drawStars(){
 $('fStars').addEventListener('click', e => { const b = e.target.closest('button'); if(b){ formRating = Number(b.dataset.n); drawStars(); } });
 
 function startForm(p){
+  if(!editable) return;
   $('form').classList.add('open');
   $('fId').value = p.id || '';
   $('fName').value = p.name || '';
@@ -335,6 +372,7 @@ function closeForm(){
 $('fCancel').onclick = closeForm;
 
 $('fSave').onclick = async () => {
+  if(!editable) return;
   const name = $('fName').value.trim();
   if(!name){ $('fName').focus(); return; }
   if(!formRating){ alert('Bitte eine Bewertung von 1 bis 5 Sternen wählen.'); return; }
@@ -348,13 +386,14 @@ $('fSave').onclick = async () => {
   await persist(); closeForm(); render();
 };
 $('fDelete').onclick = async () => {
+  if(!editable) return;
   const id = $('fId').value;
   if(!id || !confirm('Diesen Ort wirklich löschen?')) return;
   places = places.filter(p => p.id !== id);
   sel = sel.filter(s => s !== id);
   await persist(); closeForm(); render();
 };
-window.editPlace = id => { const p = places.find(x => x.id === id); if(p){ map.closePopup(); startForm(p); } };
+window.editPlace = id => { if(!editable) return; const p = places.find(x => x.id === id); if(p){ map.closePopup(); startForm(p); } };
 
 // ---- Anzeige ----
 function visible(p){
@@ -382,7 +421,7 @@ function render(){
       ${p.photos.length ? `<img src="${p.photos[0]}" alt="" onclick="showPhotos('${p.id}',0)">` : ''}
       ${p.contact ? `<div style="white-space:pre-wrap;margin-top:8px;padding-top:8px;border-top:1px solid #dbe2e6"><b>Kontakt</b><br>${linkify(p.contact)}</div>` : ''}
       ${p.note ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid #dbe2e6;white-space:pre-wrap"><b>Notiz</b><br>${esc(p.note)}</div>` : ''}
-      <p style="margin:8px 0 0"><button onclick="editPlace('${p.id}')">Bearbeiten</button></p></div>`);
+      ${editable ? `<p style="margin:8px 0 0"><button onclick="editPlace('${p.id}')">Bearbeiten</button></p>` : ''}</div>`);
     markers.set(p.id, m);
   });
 
@@ -405,7 +444,7 @@ function render(){
         ` : ''}
         <button type="button" class="note-toggle" data-expand-toggle="${p.id}">${expanded.has(p.id) ? 'Weniger anzeigen' : 'Mehr anzeigen'}</button>
       </div>
-      <button class="edit" data-act="edit">Bearbeiten</button>
+      ${editable ? `<button class="edit" data-act="edit">Bearbeiten</button>` : ''}
     </li>`).join('') : `<li class="hint" style="padding:10px 0">${places.length ? 'Keine Orte für diesen Filter.' : 'Noch keine Orte. Klicke auf die Karte, um den ersten einzutragen.'}</li>`;
 }
 $('list').addEventListener('click', e => {
@@ -480,7 +519,7 @@ $('exportBtn').onclick = () => {
   a.href = URL.createObjectURL(new Blob([JSON.stringify(places)], {type:'application/json'}));
   a.download = 'berlin-karte-orte.json'; a.click(); URL.revokeObjectURL(a.href);
 };
-$('importBtn').onclick = () => $('importFile').click();
+$('importBtn').onclick = () => { if(editable) $('importFile').click(); };
 $('importFile').onchange = async e => {
   const f = e.target.files[0]; if(!f) return;
   try{
@@ -508,7 +547,7 @@ $('importFile').onchange = async e => {
     if(!saved) persist();
   }catch(err){ places = SAMPLE.map(normalize); }
   try{ navigator.storage?.persist?.(); }catch(_){}
-  render();
+  applyEditableUI();
 })();
 </script>
 </body>
