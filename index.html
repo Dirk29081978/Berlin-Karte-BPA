@@ -104,6 +104,8 @@
   .near-list .sm{color:var(--muted);font-size:12px}
   .near-list .dist{color:var(--muted);white-space:nowrap;font-size:12px}
   .have{display:inline-block;font-size:11px;background:#e7f2ea;color:#2f7d5b;border-radius:4px;padding:0 5px;margin-left:4px}
+  #nearCenter.flash{animation:flash 1.2s ease-out}
+  @keyframes flash{0%{background:#fff3c4;border-color:#e0a100}100%{background:#fff;border-color:var(--line)}}
   .sug{width:24px;height:24px;border-radius:50%;background:#4b5b64;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.45);
     display:grid;place-items:center;font-size:12px;line-height:1}
   .sug.have-pin{background:#2f7d5b}
@@ -509,6 +511,7 @@ function render(){
       ${p.contact ? `<div style="white-space:pre-wrap;margin-top:8px;padding-top:8px;border-top:1px solid #dbe2e6"><b>Kontakt</b><br>${linkify(p.contact)}</div>` : ''}
       ${p.note ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid #dbe2e6;white-space:pre-wrap"><b>Notiz</b><br>${esc(p.note)}</div>` : ''}
       <p style="margin:8px 0 0;display:flex;gap:6px;flex-wrap:wrap">${editable ? `<button onclick="editPlace('${p.id}')">Bearbeiten</button>` : ''}<button onclick="nearFromPlace('${p.id}')">🍽️ Restaurants in der Nähe</button></p></div>`);
+    m.on('popupopen', () => setNearCenter(p.id));
     markers.set(p.id, m);
   });
 
@@ -687,6 +690,13 @@ function refreshNearCenter(){
     opts.map(p => `<option value="${esc(p.id)}">${cat(p).icon} ${esc(p.name)}</option>`).join('');
   if([...s.options].some(o => o.value === cur)) s.value = cur;
   if(nearRaw.length) drawNear();          // "schon in deiner Karte"-Kennzeichnung aktuell halten
+}
+// Angeklickter eigener Ort wird automatisch Mittelpunkt der Restaurantsuche
+function setNearCenter(id){
+  const s = $('nearCenter');
+  if(s.value === id || ![...s.options].some(o => o.value === id)) return;
+  s.value = id;
+  s.classList.remove('flash'); void s.offsetWidth; s.classList.add('flash');
 }
 function nearCenterPoint(){
   const v = $('nearCenter').value;
