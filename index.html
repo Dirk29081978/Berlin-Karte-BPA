@@ -93,6 +93,23 @@
   #lb.open{display:block}
   #lb img{display:block;max-width:min(100%,1100px);max-height:88vh;margin:0 auto 16px;border-radius:6px}
   #lb button{position:fixed;top:12px;right:14px}
+  /* ---- Restaurants in der Nähe ---- */
+  .near-box{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:#fafcfc}
+  .near-box .checks{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px;font-size:13px}
+  .near-box .checks label{display:flex;align-items:center;gap:5px;margin:0;color:var(--ink)}
+  .near-box .checks input{accent-color:var(--accent)}
+  .near-list li{display:flex;justify-content:space-between;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line);cursor:pointer;font-size:13px}
+  .near-list li:hover{background:#eef2f4}
+  .near-list .nm{font-weight:600}
+  .near-list .sm{color:var(--muted);font-size:12px}
+  .near-list .dist{color:var(--muted);white-space:nowrap;font-size:12px}
+  .have{display:inline-block;font-size:11px;background:#e7f2ea;color:#2f7d5b;border-radius:4px;padding:0 5px;margin-left:4px}
+  .sug{width:24px;height:24px;border-radius:50%;background:#4b5b64;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.45);
+    display:grid;place-items:center;font-size:12px;line-height:1}
+  .sug.have-pin{background:#2f7d5b}
+  .sug-popup .tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+  .sug-popup .tags span{font-size:11px;background:#eef2f4;border-radius:4px;padding:1px 6px}
+  .sug-popup .src{color:#66777f;font-size:11px;margin-top:6px}
   @media (max-width:820px){
     .app{grid-template-columns:1fr;grid-template-rows:50vh 50vh}
     #map{order:-1}
@@ -168,6 +185,44 @@
       <button id="clearRoute">Zurücksetzen</button>
     </div>
     <div class="route-box" id="routeBox"></div>
+
+    <h2>Restaurants in der Nähe</h2>
+    <div class="near-box">
+      <label for="nearCenter" style="margin-top:0">Rund um</label>
+      <select id="nearCenter" aria-label="Mittelpunkt der Suche"></select>
+      <div class="row" style="margin-top:8px">
+        <select id="nearRadius" aria-label="Umkreis">
+          <option value="500">500 m</option>
+          <option value="1000" selected>1 km</option>
+          <option value="2000">2 km</option>
+          <option value="5000">5 km</option>
+        </select>
+        <select id="nearCuisine" aria-label="Küche">
+          <option value="">Alle Küchen</option>
+          <option value="deutsch">Deutsch / regional</option>
+          <option value="italienisch">Italienisch / Pizza</option>
+          <option value="asiatisch">Asiatisch</option>
+          <option value="griechisch">Griechisch / Mediterran</option>
+          <option value="tuerkisch">Türkisch / Orientalisch</option>
+          <option value="burger">Burger / Amerikanisch</option>
+          <option value="fisch">Fisch / Meeresfrüchte</option>
+          <option value="steak">Steak / Grill</option>
+        </select>
+      </div>
+      <div class="chips" id="nearTypes" style="margin-top:8px"></div>
+      <div class="checks">
+        <label><input type="checkbox" id="nearVeg"> vegetarisch/vegan</label>
+        <label><input type="checkbox" id="nearOutdoor"> Außenplätze</label>
+        <label><input type="checkbox" id="nearWheel"> rollstuhlgerecht</label>
+        <label><input type="checkbox" id="nearHours"> mit Öffnungszeiten</label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="primary" id="nearBtn">Restaurants suchen</button>
+        <button id="nearClear">Ausblenden</button>
+      </div>
+      <p class="hint" id="nearInfo" style="margin:8px 0 0"></p>
+      <ul class="near-list" id="nearList"></ul>
+    </div>
 
     <h2>Meine Orte <span class="hint" id="count"></span></h2>
     <div class="chips" id="fltCats" aria-label="Kategorien filtern"></div>
@@ -380,7 +435,7 @@ function startForm(p){
   $('fName').value = p.name || '';
   $('fNote').value = p.note || '';
   $('fContact').value = p.contact || '';
-  $('fDate').value = p.date || new Date().toISOString().slice(0,10);
+  $('fDate').value = p.date ?? new Date().toISOString().slice(0,10);
   formRating = p.rating || 0; drawStars();
   formCat = p.category || 'restaurant'; drawFormCats();
   formColor = p.color || null; drawFormColors();
@@ -453,13 +508,14 @@ function render(){
       ${p.photos.length ? `<img src="${p.photos[0]}" alt="" onclick="showPhotos('${p.id}',0)">` : ''}
       ${p.contact ? `<div style="white-space:pre-wrap;margin-top:8px;padding-top:8px;border-top:1px solid #dbe2e6"><b>Kontakt</b><br>${linkify(p.contact)}</div>` : ''}
       ${p.note ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid #dbe2e6;white-space:pre-wrap"><b>Notiz</b><br>${esc(p.note)}</div>` : ''}
-      ${editable ? `<p style="margin:8px 0 0"><button onclick="editPlace('${p.id}')">Bearbeiten</button></p>` : ''}</div>`);
+      <p style="margin:8px 0 0;display:flex;gap:6px;flex-wrap:wrap">${editable ? `<button onclick="editPlace('${p.id}')">Bearbeiten</button>` : ''}<button onclick="nearFromPlace('${p.id}')">🍽️ Restaurants in der Nähe</button></p></div>`);
     markers.set(p.id, m);
   });
 
   const mode = $('sort').value, sorted = [...shown];
   if(mode === 'rating') sorted.sort((a,b) => b.rating - a.rating || a.name.localeCompare(b.name));
   if(mode === 'name') sorted.sort((a,b) => a.name.localeCompare(b.name));
+  refreshNearCenter();
   $('count').textContent = shown.length === places.length ? `(${places.length})` : `(${shown.length} von ${places.length})`;
   $('list').innerHTML = sorted.length ? sorted.map(p => `
     <li class="place" data-id="${p.id}">
@@ -571,6 +627,236 @@ $('importFile').onchange = async e => {
   }catch(err){ alert('Die Datei konnte nicht gelesen oder gespeichert werden: ' + err.message); }
   e.target.value = '';
 };
+
+// ---- Restaurants in der Nähe (OpenStreetMap / Overpass) ----
+const NEAR_TYPES = {
+  restaurant: {label:'Restaurant', icon:'🍽️', amenity:['restaurant']},
+  cafe:       {label:'Café',       icon:'☕', amenity:['cafe']},
+  imbiss:     {label:'Imbiss',     icon:'🥡', amenity:['fast_food']},
+  biergarten: {label:'Biergarten/Kneipe', icon:'🍺', amenity:['biergarten','pub']}
+};
+const CUISINE_GROUPS = {
+  deutsch:     /german|regional|bavarian|brandenburg|berlin|schnitzel|austrian/,
+  italienisch: /italian|pizza|pasta/,
+  asiatisch:   /asian|chinese|vietnamese|thai|japanese|sushi|korean|indian|ramen|noodle|pakistani|nepalese|indonesian/,
+  griechisch:  /greek|mediterranean|spanish|tapas|portuguese|balkan|croatian/,
+  tuerkisch:   /turkish|kebab|doner|döner|arab|lebanese|syrian|persian|middle_eastern|oriental|falafel/,
+  burger:      /burger|american|diner/,
+  fisch:       /fish|seafood/,
+  steak:       /steak|grill|barbecue|bbq|argentinian/
+};
+const CUISINE_DE = {german:'deutsch',regional:'regional',italian:'italienisch',pizza:'Pizza',pasta:'Pasta',asian:'asiatisch',chinese:'chinesisch',
+  vietnamese:'vietnamesisch',thai:'thailändisch',japanese:'japanisch',sushi:'Sushi',korean:'koreanisch',indian:'indisch',greek:'griechisch',
+  mediterranean:'mediterran',spanish:'spanisch',tapas:'Tapas',turkish:'türkisch',kebab:'Kebab',burger:'Burger',american:'amerikanisch',
+  fish:'Fisch',seafood:'Meeresfrüchte',steak_house:'Steakhouse',steak:'Steak',grill:'Grill',barbecue:'Barbecue',coffee_shop:'Kaffee',
+  cake:'Kuchen',ice_cream:'Eis',sandwich:'Sandwiches',french:'französisch',mexican:'mexikanisch',lebanese:'libanesisch',arab:'arabisch',
+  international:'international',vegan:'vegan',vegetarian:'vegetarisch',bavarian:'bayerisch',austrian:'österreichisch',chicken:'Hähnchen',
+  breakfast:'Frühstück',bagel:'Bagels',ramen:'Ramen',noodle:'Nudeln',persian:'persisch',syrian:'syrisch',portuguese:'portugiesisch',
+  russian:'russisch',polish:'polnisch',balkan:'Balkan',croatian:'kroatisch',middle_eastern:'orientalisch',falafel:'Falafel',
+  doner:'Döner',curry:'Curry',friture:'Frittiertes',currywurst:'Currywurst',regional_german:'regional'};
+const OVERPASS = ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
+const NEAR_MAX = 250;
+let nearActiveTypes = new Set(['restaurant']);
+let nearRaw = [], nearKey = '', nearCenterLL = null;
+const nearLayer = L.layerGroup().addTo(map);
+const nearMarkers = new Map();
+let nearCircle = null;
+
+function haversine(a, b){
+  const R = 6371000, r = x => x * Math.PI / 180;
+  const dLat = r(b.lat - a.lat), dLng = r(b.lng - a.lng);
+  const h = Math.sin(dLat/2)**2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLng/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+const fmtDist = m => m < 1000 ? Math.round(m / 10) * 10 + ' m' : (m/1000).toFixed(1).replace('.', ',') + ' km';
+
+function drawNearTypes(){
+  $('nearTypes').innerHTML = Object.entries(NEAR_TYPES).map(([k, t]) =>
+    `<button type="button" class="chip ${nearActiveTypes.has(k) ? 'on' : ''}" style="--cc:#4b5b64" data-t="${k}">${t.icon} ${t.label}</button>`).join('');
+}
+$('nearTypes').onclick = e => {
+  const b = e.target.closest('[data-t]'); if(!b) return;
+  nearActiveTypes.has(b.dataset.t) ? nearActiveTypes.delete(b.dataset.t) : nearActiveTypes.add(b.dataset.t);
+  drawNearTypes(); if(nearRaw.length) drawNear();
+};
+
+function refreshNearCenter(){
+  const s = $('nearCenter'), cur = s.value;
+  const opts = [...places].sort((a,b) => a.name.localeCompare(b.name));
+  s.innerHTML = '<option value="__map">Aktuelle Kartenmitte</option>' +
+    opts.map(p => `<option value="${esc(p.id)}">${cat(p).icon} ${esc(p.name)}</option>`).join('');
+  if([...s.options].some(o => o.value === cur)) s.value = cur;
+  if(nearRaw.length) drawNear();          // "schon in deiner Karte"-Kennzeichnung aktuell halten
+}
+function nearCenterPoint(){
+  const v = $('nearCenter').value;
+  if(v && v !== '__map'){
+    const p = places.find(x => x.id === v);
+    if(p) return {lat: p.lat, lng: p.lng, label: p.name};
+  }
+  const c = map.getCenter();
+  return {lat: c.lat, lng: c.lng, label: 'Kartenmitte'};
+}
+
+async function overpass(query){
+  let lastErr;
+  for(const url of OVERPASS){
+    try{
+      const res = await fetch(url, {method:'POST', body: 'data=' + encodeURIComponent(query),
+        headers:{'Content-Type':'application/x-www-form-urlencoded'}});
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    }catch(err){ lastErr = err; }
+  }
+  throw lastErr;
+}
+
+async function searchNear(){
+  const c = nearCenterPoint(), radius = Number($('nearRadius').value);
+  const key = `${c.lat.toFixed(5)},${c.lng.toFixed(5)},${radius}`;
+  nearCenterLL = c;
+  if(nearCircle) map.removeLayer(nearCircle);
+  nearCircle = L.circle([c.lat, c.lng], {radius, color:'#4b5b64', weight:1.5, dashArray:'5 6', fillOpacity:.04, interactive:false}).addTo(map);
+  map.fitBounds(nearCircle.getBounds(), {padding:[20,20]});
+  if(key === nearKey && nearRaw.length){ drawNear(); return; }
+  $('nearInfo').textContent = 'Suche läuft …';
+  $('nearList').innerHTML = '';
+  $('nearBtn').disabled = true;
+  const q = `[out:json][timeout:25];nwr["amenity"~"^(restaurant|cafe|fast_food|biergarten|pub)$"]["name"](around:${radius},${c.lat},${c.lng});out center tags;`;
+  try{
+    const data = await overpass(q);
+    nearRaw = data.elements.map(el => {
+      const lat = el.lat ?? el.center?.lat, lng = el.lon ?? el.center?.lon;
+      if(lat == null || lng == null) return null;
+      return {id: el.type[0] + el.id, lat, lng, tags: el.tags || {}, dist: haversine(c, {lat, lng})};
+    }).filter(Boolean).sort((a,b) => a.dist - b.dist);
+    nearKey = key;
+    drawNear();
+  }catch(err){
+    console.error(err);
+    $('nearInfo').textContent = 'Der OpenStreetMap-Suchdienst ist gerade nicht erreichbar oder überlastet. Bitte in ein paar Minuten erneut versuchen.';
+  }finally{
+    $('nearBtn').disabled = false;
+  }
+}
+
+function nearTypeKey(t){
+  for(const [k, def] of Object.entries(NEAR_TYPES)) if(def.amenity.includes(t.amenity)) return k;
+  return 'restaurant';
+}
+function nearMatches(r){
+  const t = r.tags;
+  if(!nearActiveTypes.has(nearTypeKey(t))) return false;
+  const cu = $('nearCuisine').value;
+  if(cu && !CUISINE_GROUPS[cu].test((t.cuisine || '').toLowerCase())) return false;
+  if($('nearVeg').checked && !/^(yes|only)$/.test(t['diet:vegetarian'] || '') && !/^(yes|only)$/.test(t['diet:vegan'] || '')) return false;
+  if($('nearOutdoor').checked && !/^(yes|garden|terrace|veranda|sidewalk)$/.test(t.outdoor_seating || '') && t.amenity !== 'biergarten') return false;
+  if($('nearWheel').checked && t.wheelchair !== 'yes') return false;
+  if($('nearHours').checked && !t.opening_hours) return false;
+  return true;
+}
+function alreadyHave(r){
+  const n = (r.tags.name || '').toLowerCase();
+  return places.some(p => haversine(p, r) < 60 && (p.name.toLowerCase().includes(n) || n.includes(p.name.toLowerCase())));
+}
+function cuisineText(t){
+  return (t.cuisine || '').split(/[;,]/).map(s => s.trim()).filter(Boolean).map(s => CUISINE_DE[s] || s.replace(/_/g, ' ')).join(', ');
+}
+function addrText(t){
+  const street = [t['addr:street'], t['addr:housenumber']].filter(Boolean).join(' ');
+  const city = [t['addr:postcode'], t['addr:city']].filter(Boolean).join(' ');
+  return [street, city].filter(Boolean).join(', ');
+}
+function featureTags(t){
+  const f = [];
+  if(t['diet:vegan'] === 'only') f.push('rein vegan');
+  else if(t['diet:vegetarian'] === 'only') f.push('rein vegetarisch');
+  else { if(/^(yes)$/.test(t['diet:vegan'] || '')) f.push('vegane Optionen'); if(/^(yes)$/.test(t['diet:vegetarian'] || '')) f.push('vegetarische Optionen'); }
+  if(/^(yes|garden|terrace|veranda|sidewalk)$/.test(t.outdoor_seating || '')) f.push('Außenplätze');
+  if(t.wheelchair === 'yes') f.push('rollstuhlgerecht');
+  if(t.wheelchair === 'limited') f.push('teilw. rollstuhlgerecht');
+  if(t.takeaway === 'yes') f.push('zum Mitnehmen');
+  if(t.delivery === 'yes') f.push('Lieferung');
+  if(t.reservation === 'required') f.push('Reservierung nötig');
+  return f;
+}
+
+function drawNear(){
+  nearLayer.clearLayers(); nearMarkers.clear();
+  const hits = nearRaw.filter(nearMatches);
+  const shown = hits.slice(0, NEAR_MAX);
+  shown.forEach(r => {
+    const t = r.tags, type = NEAR_TYPES[nearTypeKey(t)], have = alreadyHave(r);
+    const m = L.marker([r.lat, r.lng], {
+      icon: L.divIcon({className:'', html:`<div class="sug ${have ? 'have-pin' : ''}">${type.icon}</div>`, iconSize:[24,24], iconAnchor:[12,12], popupAnchor:[0,-12]}),
+      zIndexOffset: -500
+    });
+    m.bindTooltip(esc(t.name), {sticky:true, direction:'right', offset:[10,0]});
+    m.bindPopup(() => nearPopup(r), {maxWidth: 280});
+    m.addTo(nearLayer);
+    nearMarkers.set(r.id, m);
+  });
+  const c = nearCenterLL ? nearCenterLL.label : '';
+  $('nearInfo').innerHTML = nearRaw.length
+    ? `${hits.length} Treffer rund um <b>${esc(c)}</b>` + (hits.length > NEAR_MAX ? ` – die nächsten ${NEAR_MAX} werden angezeigt.` : '.') +
+      (hits.length ? ' Grau = Vorschlag, grün = schon in deiner Karte.' : ' Filter lockern oder Umkreis vergrößern.')
+    : 'Keine Restaurants gefunden. Umkreis vergrößern?';
+  $('nearList').innerHTML = shown.slice(0, 60).map(r => {
+    const t = r.tags, type = NEAR_TYPES[nearTypeKey(t)], cu = cuisineText(t);
+    return `<li data-nid="${r.id}"><div><span class="nm">${type.icon} ${esc(t.name)}</span>${alreadyHave(r) ? '<span class="have">schon drin</span>' : ''}
+      <div class="sm">${esc([type.label, cu].filter(Boolean).join(' · '))}</div></div><span class="dist">${fmtDist(r.dist)}</span></li>`;
+  }).join('') + (shown.length > 60 ? `<li class="hint" style="cursor:default">… weitere ${shown.length - 60} auf der Karte</li>` : '');
+}
+
+function nearPopup(r){
+  const t = r.tags, type = NEAR_TYPES[nearTypeKey(t)], cu = cuisineText(t), addr = addrText(t);
+  const web = t.website || t['contact:website'], phone = t.phone || t['contact:phone'];
+  const feats = featureTags(t), have = alreadyHave(r);
+  return `<div class="popup sug-popup"><b>${esc(t.name)}</b><br>
+    <span style="color:#66777f">${type.icon} ${esc([type.label, cu].filter(Boolean).join(' · '))} · ${fmtDist(r.dist)}</span>
+    ${addr ? `<div style="margin-top:6px">${esc(addr)}</div>` : ''}
+    ${t.opening_hours ? `<div style="margin-top:6px"><b>Öffnungszeiten</b><br><span style="font-size:12px">${esc(t.opening_hours)}</span></div>` : ''}
+    ${phone ? `<div style="margin-top:6px">📞 <a href="tel:${esc(phone.replace(/\s/g,''))}">${esc(phone)}</a></div>` : ''}
+    ${web ? `<div style="margin-top:4px">${linkify(web)}</div>` : ''}
+    ${feats.length ? `<div class="tags">${feats.map(f => `<span>${esc(f)}</span>`).join('')}</div>` : ''}
+    <p style="margin:8px 0 0">${have ? '<span class="have" style="margin:0">schon in deiner Karte</span>'
+      : editable ? `<button class="primary" onclick="adoptNear('${r.id}')">In meine Karte übernehmen</button>`
+      : '<span class="hint">Zum Übernehmen oben anmelden.</span>'}</p>
+    <div class="src">Daten: OpenStreetMap</div></div>`;
+}
+
+window.adoptNear = id => {
+  if(!editable) return;
+  const r = nearRaw.find(x => x.id === id); if(!r) return;
+  const t = r.tags, cu = cuisineText(t), addr = addrText(t);
+  const web = t.website || t['contact:website'], phone = t.phone || t['contact:phone'];
+  const contact = [addr, phone, web].filter(Boolean).join('\n');
+  const note = [cu ? 'Küche: ' + cu : '', t.opening_hours ? 'Öffnungszeiten: ' + t.opening_hours : '',
+    featureTags(t).join(', '), 'Vorschlag aus OpenStreetMap – noch nicht besucht.'].filter(Boolean).join('\n');
+  map.closePopup();
+  startForm({lat: r.lat, lng: r.lng, name: t.name, category: 'restaurant', contact, note, date: ''});
+};
+window.nearFromPlace = id => {
+  map.closePopup();
+  $('nearCenter').value = id;
+  $('nearBtn').scrollIntoView({block:'center', behavior:'smooth'});
+  searchNear();
+};
+
+$('nearBtn').onclick = searchNear;
+$('nearClear').onclick = () => {
+  nearLayer.clearLayers(); nearMarkers.clear(); nearRaw = []; nearKey = '';
+  if(nearCircle){ map.removeLayer(nearCircle); nearCircle = null; }
+  $('nearList').innerHTML = ''; $('nearInfo').textContent = '';
+};
+['nearCuisine','nearVeg','nearOutdoor','nearWheel','nearHours'].forEach(id => $(id).onchange = () => { if(nearRaw.length) drawNear(); });
+$('nearList').onclick = e => {
+  const li = e.target.closest('[data-nid]'); if(!li) return;
+  const r = nearRaw.find(x => x.id === li.dataset.nid); if(!r) return;
+  map.flyTo([r.lat, r.lng], Math.max(map.getZoom(), 16));
+  setTimeout(() => nearMarkers.get(r.id)?.openPopup(), 400);
+};
+drawNearTypes();
 
 // ---- Start ----
 drawFilterCats(); drawFormCats(); drawFormColors(); drawStars();
